@@ -36,6 +36,8 @@ CPU_VARIANTS = {
     "full+cfu":           "VexRiscv_FullCfu",
     "full+debug":         "VexRiscv_FullDebug",
     "full+cfu+debug":     "VexRiscv_FullCfuDebug",
+    ## yentingn for DMA
+    "full+cfu+dma":       "VexRiscv_FullCfu",
     "linux":              "VexRiscv_Linux",
     "linux+debug":        "VexRiscv_LinuxDebug",
     "linux+no-dsp":       "VexRiscv_LinuxNoDspFmax",
@@ -65,6 +67,8 @@ GCC_FLAGS = {
     "full+cfu":         "-march=rv32i2p0_m     -mabi=ilp32",
     "full+debug":       "-march=rv32i2p0_m     -mabi=ilp32",
     "full+cfu+debug":   "-march=rv32i2p0_m     -mabi=ilp32",
+    ## yentingn for DMA
+    "full+cfu+dma":     "-march=rv32i2p0_m     -mabi=ilp32",
     "linux":            "-march=rv32i2p0_ma    -mabi=ilp32",
     "linux+debug":      "-march=rv32i2p0_ma    -mabi=ilp32",
     "linux+no-dsp":     "-march=rv32i2p0_ma    -mabi=ilp32",
@@ -301,19 +305,52 @@ class VexRiscv(CPU, AutoCSR):
         # The CFU:CPU Bus.
         self.cfu_bus = cfu_bus = Record(cfu_bus_layout)
 
-        # Connect CFU to the CFU:CPU bus.
-        self.cfu_params = dict(
-            i_cmd_valid                = cfu_bus.cmd.valid,
-            o_cmd_ready                = cfu_bus.cmd.ready,
-            i_cmd_payload_function_id  = cfu_bus.cmd.payload.function_id,
-            i_cmd_payload_inputs_0     = cfu_bus.cmd.payload.inputs_0,
-            i_cmd_payload_inputs_1     = cfu_bus.cmd.payload.inputs_1,
-            o_rsp_valid                = cfu_bus.rsp.valid,
-            i_rsp_ready                = cfu_bus.rsp.ready,
-            o_rsp_payload_outputs_0    = cfu_bus.rsp.payload.outputs_0,
-            i_clk                      = ClockSignal("sys"),
-            i_reset                    = ResetSignal("sys"),
-        )
+        ## yentingn use dbus for Wishbone
+        if self.variant == "full+cfu+dma":
+            dbus = wishbone.Interface(data_width=32, adr_width=32) # , addressing="word"
+            self.periph_buses.append(dbus)
+            # Connect CFU to the CFU:CPU bus.
+            self.cfu_params = dict(
+                i_cmd_valid                = cfu_bus.cmd.valid,
+                o_cmd_ready                = cfu_bus.cmd.ready,
+                i_cmd_payload_function_id  = cfu_bus.cmd.payload.function_id,
+                i_cmd_payload_inputs_0     = cfu_bus.cmd.payload.inputs_0,
+                i_cmd_payload_inputs_1     = cfu_bus.cmd.payload.inputs_1,
+                o_rsp_valid                = cfu_bus.rsp.valid,
+                i_rsp_ready                = cfu_bus.rsp.ready,
+                o_rsp_payload_outputs_0    = cfu_bus.rsp.payload.outputs_0,
+                i_clk                      = ClockSignal("sys"),
+                i_reset                    = ResetSignal("sys"),
+
+                ## yentingn: Added direct RAM access from CFU
+                o_dBusWishbone_ADR      = dbus.adr,
+                o_dBusWishbone_DAT_MOSI = dbus.dat_w,
+                o_dBusWishbone_SEL      = dbus.sel,
+                o_dBusWishbone_CYC      = dbus.cyc,
+                o_dBusWishbone_STB      = dbus.stb,
+                o_dBusWishbone_WE       = dbus.we,
+                o_dBusWishbone_CTI      = dbus.cti,
+                o_dBusWishbone_BTE      = dbus.bte,
+                i_dBusWishbone_DAT_MISO = dbus.dat_r,
+                i_dBusWishbone_ACK      = dbus.ack,
+                i_dBusWishbone_ERR      = dbus.err
+            )
+        else:
+            # Connect CFU to the CFU:CPU bus.
+            self.cfu_params = dict(
+                i_cmd_valid                = cfu_bus.cmd.valid,
+                o_cmd_ready                = cfu_bus.cmd.ready,
+                i_cmd_payload_function_id  = cfu_bus.cmd.payload.function_id,
+                i_cmd_payload_inputs_0     = cfu_bus.cmd.payload.inputs_0,
+                i_cmd_payload_inputs_1     = cfu_bus.cmd.payload.inputs_1,
+                o_rsp_valid                = cfu_bus.rsp.valid,
+                i_rsp_ready                = cfu_bus.rsp.ready,
+                o_rsp_payload_outputs_0    = cfu_bus.rsp.payload.outputs_0,
+                i_clk                      = ClockSignal("sys"),
+                i_reset                    = ResetSignal("sys"),
+            )
+
+
         self.platform.add_source(cfu_filename)
 
         # Connect CPU to the CFU:CPU bus.
